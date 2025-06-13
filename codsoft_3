@@ -1,0 +1,43 @@
+from transformers import VisionEncoderDecoderModel, ViTImageProcessor, AutoTokenizer
+import torch
+from PIL import Image
+import os
+import warnings
+import logging
+
+warnings.filterwarnings("ignore")
+logging.getLogger("transformers").setLevel(logging.ERROR)
+
+model = VisionEncoderDecoderModel.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
+feature_extractor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
+tokenizer = AutoTokenizer.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+
+gen_kwargs = {"max_length": 16}
+
+def predict_step(image_paths):
+    images = []
+    for image_path in image_paths:
+        if not os.path.isfile(image_path):
+            raise FileNotFoundError(f"File not found: {image_path}")
+        try:
+            image = Image.open(image_path)
+            if image.mode != "RGB":
+                image = image.convert("RGB")
+            images.append(image)
+        except Exception as e:
+            raise RuntimeError(f"Error opening image {image_path}: {e}")
+
+    pixel_values = feature_extractor(images=images, return_tensors="pt").pixel_values.to(device)
+    output_ids = model.generate(pixel_values, **gen_kwargs)
+    captions = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+    return [caption.strip() for caption in captions]
+
+if __name__ == "__main__":
+    try:
+        result = predict_step(['C:/Users/admin/AppData/Local/Programs/Python/Python313/1695649018042[1].jpg'])
+        print("Caption(s):", result)
+    except Exception as e:
+        print("Error:", e)
